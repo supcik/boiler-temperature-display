@@ -103,7 +103,7 @@ void displayUpdate()
     }
 }
 
-void displayConnexionError()
+void displayConnectionError()
 {
     int bgColor = RED;
     M5.Lcd.fillScreen(bgColor);
@@ -133,7 +133,7 @@ void connect()
         if (WiFi.status() == WL_CONNECTED) return;
         delay(kConnectDelay);
     }
-    displayConnexionError();
+    displayConnectionError();
 }
 
 void displayValues()
