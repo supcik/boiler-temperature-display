@@ -61,11 +61,9 @@ void displayStart()
 
 void displayUpdate()
 {
-    const auto bgColor = PURPLE;
-    M5.Lcd.fillScreen(bgColor);
-    M5.Lcd.setTextColor(WHITE, bgColor);
+    M5.Lcd.setTextColor(PURPLE, BLACK);
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
-    int yPos = 60;
+    int yPos = 180;
     M5.lcd.drawCentreString("Mise à jour...", kCenterX, yPos, 1);
     yPos += M5.Lcd.fontHeight();
 }
@@ -103,7 +101,7 @@ void displayTemp(float t)
     static float old_t = -1;
     if (t == old_t) return;
     char text[8];
-    sprintf(text, "%4.1f\260C", t);
+    sprintf(text, "%4.1f°C", t);
     if (t > 60) {
         M5.Lcd.setTextColor(RED, BLACK);
     } else {
