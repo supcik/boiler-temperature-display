@@ -25,22 +25,44 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <M5Stack.h>
-#include <Regexp.h>
 #include <WiFi.h>
 
+#include "IBMPlexMonoRegular9pt8b.h"
 #include "IBMPlexMonoSemiBold40pt8b.h"
 #include "IBMPlexSansBold18pt8b.h"
 #include "IBMPlexSansRegular18pt8b.h"
 #include "secret.h"
 
-const int kConnectRetry = 10;
+const int kConnectRetry = 30;
 const int kConnectDelay = 500;      // milliseconds
 const int kPollPeriod   = 15 * 60;  // in seconds
 const int kCenterX      = 160;
 
+// Global variables
+
+float curTemp;
+String curDate         = "----.--.--";
+String curTime         = "--:--:--";
+int valueScreenBgColor = BLACK;
+bool isError           = false;
+
+String extractField(String s, String key)
+{
+    // search key
+    int pos = s.indexOf("id=\"" + key + "\"");
+    if (pos < 0) return "";
+    // search end of tag
+    pos = s.indexOf(">", pos);
+    if (pos < 0) return "";
+    // search next tag
+    int end = s.indexOf("<", pos + 1);
+    if (end < 0) return "";
+    return s.substring(pos + 1, end);
+}
+
 void displayStart()
 {
-    const auto bgColor = BLUE;
+    int bgColor = BLUE;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE, bgColor);
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
@@ -56,25 +78,38 @@ void displayStart()
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
     M5.lcd.drawCentreString("Démarrage...", kCenterX, yPos, 1);
     yPos += M5.Lcd.fontHeight();
+    isError = false;
     delay(5000);
 }
 
 void displayUpdate()
 {
-    M5.Lcd.setTextColor(PURPLE, BLACK);
-    M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
-    int yPos = 180;
-    M5.lcd.drawCentreString("Mise à jour...", kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    if (isError) {
+        int bgColor = PURPLE;
+        M5.Lcd.fillScreen(bgColor);
+        M5.Lcd.setTextColor(WHITE, bgColor);
+        M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
+        int yPos = 70;
+        M5.lcd.drawCentreString("Connexion et", kCenterX, yPos, 1);
+        yPos += M5.Lcd.fontHeight();
+        M5.lcd.drawCentreString("mise à jour...", kCenterX, yPos, 1);
+        yPos += M5.Lcd.fontHeight();
+    } else {
+        M5.Lcd.setTextColor(WHITE, valueScreenBgColor);
+        M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
+        int yPos = 180;
+        M5.lcd.drawCentreString("Mise à jour...", kCenterX, yPos, 1);
+        yPos += M5.Lcd.fontHeight();
+    }
 }
 
 void displayConnexionError()
 {
-    const auto bgColor = RED;
+    int bgColor = RED;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE, bgColor);
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
-    int yPos = 30;
+    int yPos = 25;
     M5.lcd.drawCentreString("Impossible de se", kCenterX, yPos, 1);
     yPos += M5.Lcd.fontHeight();
     M5.lcd.drawCentreString("connecter au Wifi", kCenterX, yPos, 1);
@@ -82,7 +117,12 @@ void displayConnexionError()
     M5.Lcd.setFreeFont(&IBMPlexSans_Bold18pt8b);
     M5.lcd.drawCentreString(kSSID, kCenterX, yPos, 1);
     yPos += M5.Lcd.fontHeight();
+    M5.Lcd.setFreeFont(&IBMPlexMono_Regular9pt8b);
+    yPos += 7;
+    M5.lcd.drawCentreString(kPassPhrase, kCenterX, yPos, 1);
+    yPos += M5.Lcd.fontHeight();
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
+    isError = true;
 }
 
 void connect()
@@ -96,53 +136,46 @@ void connect()
     displayConnexionError();
 }
 
-void displayTemp(float t)
+void displayValues()
 {
-    static float old_t = -1;
-    if (t == old_t) return;
-    char text[8];
-    sprintf(text, "%4.1f°C", t);
-    if (t > 60) {
-        M5.Lcd.setTextColor(RED, BLACK);
+    int fgColor;
+    if (curTemp > 60) {
+        fgColor            = RED;
+        valueScreenBgColor = BLACK;
     } else {
-        M5.Lcd.setTextColor(CYAN, BLACK);
+        fgColor            = CYAN;
+        valueScreenBgColor = BLACK;
     }
-    M5.Lcd.fillScreen(BLACK);
+
+    M5.Lcd.fillScreen(valueScreenBgColor);
+    M5.Lcd.setTextColor(WHITE, valueScreenBgColor);
+    M5.Lcd.setFreeFont(&IBMPlexMono_Regular9pt8b);
+    M5.lcd.drawString(curDate, 5, 5, 1);
+    M5.lcd.drawRightString(curTime, 315, 5, 1);
+
+    char text[8];
+    sprintf(text, "%4.1f°C", curTemp);
+    M5.Lcd.setTextColor(fgColor, valueScreenBgColor);
     M5.Lcd.setFreeFont(&IBMPlexMono_SemiBold40pt8b);
     M5.lcd.drawCentreString(text, kCenterX, 70, 1);
-    old_t = t;
+    isError = false;
 }
 
-float extractTemperature(String s)
+void updateValues()
 {
-    // search key
-    int pos = s.indexOf("id=\"analogOutTemp\"");
-    if (pos < 0) return NAN;
-    // search end of tag
-    pos = s.indexOf(">", pos);
-    if (pos < 0) return NAN;
-    // search next tag
-    int end = s.indexOf("<", pos + 1);
-    if (end < 0) return NAN;
-    // search first digit
-    while (pos < end && !((isdigit(s.charAt(pos))) || s.charAt(pos) == '-')) {
-        pos++;
-    }
-    if (pos >= end) return NAN;
-    return s.substring(pos, end).toFloat();
-}
-
-float getTemp()
-{
-    float result = NAN;
+    curTemp = NAN;
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String payload;
         http.begin(kUrl.c_str());
-        Serial.println(kUrl);
         int res = http.GET();
         if (res > 0) {
-            result = extractTemperature(http.getString());
+            String payload = http.getString();
+            curDate        = extractField(payload, "dateValue");
+            curTime        = extractField(payload, "timeValue").substring(0, 8);
+            String s       = extractField(payload, "analogOutTemp");
+            if (s != "") {
+                curTemp = s.toFloat();
+            }
         } else {
             Serial.printf("HTTP GET failed, error: %s\n",
                           http.errorToString(res).c_str());
@@ -151,7 +184,6 @@ float getTemp()
     } else {
         Serial.println("Not connected");
     }
-    return result;
 }
 
 void setup()
@@ -174,8 +206,11 @@ void loop()
             displayUpdate();
         }
         connect();
-        displayTemp(getTemp());
-        WiFi.disconnect();
+        if (WiFi.status() == WL_CONNECTED) {
+            updateValues();
+            displayValues();
+            WiFi.disconnect();
+        }
         lastUpdate = now;
     }
     delay(20);
