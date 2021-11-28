@@ -25,7 +25,7 @@ See notes at end for glyph nomenclature & other tidbits.
 #include FT_GLYPH_H
 #include FT_MODULE_H
 #include FT_TRUETYPE_DRIVER_H
-#include "../gfxfont.h" // Adafruit_GFX font structures
+#include "gfxfont.h" // Adafruit_GFX font structures
 
 #define DPI 141 // Approximate res. of Adafruit 2.8" TFT
 
@@ -146,6 +146,8 @@ int main(int argc, char *argv[]) {
   // the right symbols, and that's not done yet.
   // fprintf(stderr, "%ld glyphs\n", face->num_glyphs);
 
+  printf("#include <Arduino.h>\n");
+  printf("#include <M5Stack.h>\n\n");
   printf("const uint8_t %sBitmaps[] PROGMEM = {\n  ", fontName);
 
   // Process glyphs and output huge bitmap data array
