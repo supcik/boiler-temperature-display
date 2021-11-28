@@ -16,16 +16,16 @@
  * @file main.cpp
  * @author Jacques Supcik <jacques@supcik.net>
  *
- * @brief Boiler Temperature Display
+ * @brief Water Consumption and temperature Display
  *
  * @date 2021-11-10
  * @version 0.1.0
  ***************************************************************************/
 
 #include <Arduino.h>
-#include <HTTPClient.h>
 #include <M5Stack.h>
-#include <WiFi.h>
+#include <MQTT.h>
+#include <Wifi.h>
 
 #include "IBMPlexMonoRegular9pt8b.h"
 #include "IBMPlexMonoSemiBold40pt8b.h"
@@ -33,157 +33,171 @@
 #include "IBMPlexSansRegular18pt8b.h"
 #include "secret.h"
 
-const int kConnectRetry = 30;
-const int kConnectDelay = 500;      // milliseconds
-const int kPollPeriod   = 15 * 60;  // in seconds
-const int kCenterX      = 160;
+const int kConnectTimeout = 10000;           // milliseconds
+const int kConnectDelay   = 1000;            // milliseconds
+const int kCenterX        = TFT_HEIGHT / 2;  // Note : TFT_HEIGHT is the width
 
 // Global variables
+WiFiClient net;
+MQTTClient client;
 
-float curTemp;
-String curDate         = "----.--.--";
-String curTime         = "--:--:--";
-int valueScreenBgColor = BLACK;
-bool isError           = false;
+struct data {
+    String timestamp;
+    float consumption;
+    float temp;
+};
 
-String extractField(String s, String key)
-{
-    // search key
-    int pos = s.indexOf("id=\"" + key + "\"");
-    if (pos < 0) return "";
-    // search end of tag
-    pos = s.indexOf(">", pos);
-    if (pos < 0) return "";
-    // search next tag
-    int end = s.indexOf("<", pos + 1);
-    if (end < 0) return "";
-    return s.substring(pos + 1, end);
-}
+void NewLine(int& pos, float k = 0.9) { pos += M5.Lcd.fontHeight() * k; }
 
-void displayStart()
+void displayWelcome()
 {
     int bgColor = BLUE;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE, bgColor);
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
     int yPos = 20;
-    M5.lcd.drawCentreString("Température", kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
-    M5.lcd.drawCentreString("du boiler", kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    M5.lcd.drawCentreString("Mesures de", kCenterX, yPos, 1);
+    NewLine(yPos);
+    M5.lcd.drawCentreString("l'eau chaude", kCenterX, yPos, 1);
+    NewLine(yPos, 1.2);
     M5.Lcd.setFreeFont(&IBMPlexSans_Bold18pt8b);
     M5.lcd.drawCentreString(kTitle, kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    NewLine(yPos, 1.2);
     yPos += 5;
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
     M5.lcd.drawCentreString("Démarrage...", kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
-    isError = false;
+    NewLine(yPos);
     delay(5000);
 }
 
-void displayUpdate()
-{
-    if (isError) {
-        int bgColor = PURPLE;
-        M5.Lcd.fillScreen(bgColor);
-        M5.Lcd.setTextColor(WHITE, bgColor);
-        M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
-        int yPos = 70;
-        M5.lcd.drawCentreString("Connexion et", kCenterX, yPos, 1);
-        yPos += M5.Lcd.fontHeight();
-        M5.lcd.drawCentreString("mise à jour...", kCenterX, yPos, 1);
-        yPos += M5.Lcd.fontHeight();
-    } else {
-        M5.Lcd.setTextColor(WHITE, valueScreenBgColor);
-        M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
-        int yPos = 180;
-        M5.lcd.drawCentreString("Mise à jour...", kCenterX, yPos, 1);
-        yPos += M5.Lcd.fontHeight();
-    }
-}
-
-void displayConnectionError()
+void displayWifiConnectionError()
 {
     int bgColor = RED;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE, bgColor);
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
     int yPos = 25;
-    M5.lcd.drawCentreString("Impossible de se", kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    M5.lcd.drawCentreString("Je ne peux pas me", kCenterX, yPos, 1);
+    NewLine(yPos);
     M5.lcd.drawCentreString("connecter au Wifi", kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    NewLine(yPos);
     M5.Lcd.setFreeFont(&IBMPlexSans_Bold18pt8b);
     M5.lcd.drawCentreString(kSSID, kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    NewLine(yPos);
     M5.Lcd.setFreeFont(&IBMPlexMono_Regular9pt8b);
-    yPos += 7;
+    yPos += 10;
     M5.lcd.drawCentreString(kPassPhrase, kCenterX, yPos, 1);
-    yPos += M5.Lcd.fontHeight();
+    NewLine(yPos);
     M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
-    isError = true;
+}
+
+void displayMqttConnectionError()
+{
+    int bgColor = MAROON;
+    M5.Lcd.fillScreen(bgColor);
+    M5.Lcd.setTextColor(WHITE, bgColor);
+    M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
+    int yPos = 25;
+    M5.lcd.drawCentreString("Je ne peux pas me", kCenterX, yPos, 1);
+    NewLine(yPos);
+    M5.lcd.drawCentreString("connecter au", kCenterX, yPos, 1);
+    NewLine(yPos);
+    M5.lcd.drawCentreString("serveur", kCenterX, yPos, 1);
+    NewLine(yPos);
+    M5.Lcd.setFreeFont(&IBMPlexMono_Regular9pt8b);
+    yPos += 10;
+    M5.lcd.drawCentreString(kMqttServer, kCenterX, yPos, 1);
+    NewLine(yPos);
+    M5.Lcd.setFreeFont(&IBMPlexSans_Regular18pt8b);
+}
+
+void displayValues(data& d)
+{
+    int bgColor;
+    int fgColorTemp;
+    int fgColorConsumption = WHITE;
+
+    if (d.temp > 60) {
+        fgColorTemp = RED;
+        bgColor     = BLACK;
+    } else {
+        fgColorTemp = CYAN;
+        bgColor     = BLACK;
+    }
+
+    M5.Lcd.fillScreen(bgColor);
+    M5.Lcd.setTextColor(WHITE, bgColor);
+    M5.Lcd.setFreeFont(&IBMPlexMono_Regular9pt8b);
+    M5.lcd.drawCentreString(d.timestamp, kCenterX, 5, 1);
+
+    char text[16];
+    int yPos = 60;
+
+    sprintf(text, "%4.1f°C", d.temp);
+    String s = String(text);
+    s.trim();
+    M5.Lcd.setTextColor(fgColorTemp, bgColor);
+    M5.Lcd.setFreeFont(&IBMPlexMono_SemiBold40pt8b);
+    M5.lcd.drawCentreString(s.c_str(), kCenterX, yPos, 1);
+    NewLine(yPos);
+
+    sprintf(text, "%4.0f l", d.consumption);
+    s = String(text);
+    s.trim();
+    M5.Lcd.setTextColor(fgColorConsumption, bgColor);
+    M5.Lcd.setFreeFont(&IBMPlexMono_SemiBold40pt8b);
+    M5.lcd.drawCentreString(s.c_str(), kCenterX, yPos, 1);
+}
+
+void messageReceived(String& topic, String& payload)
+{
+    Serial.println("incoming: " + topic + " - " + payload);
+    int p1 = payload.indexOf(";");
+    int p2 = payload.indexOf(";", p1 + 1);
+    int p3 = payload.indexOf(";", p2 + 1);
+    if (p3 < 0) {
+        p3 = payload.length();
+    }
+    data d = {
+        .timestamp   = payload.substring(0, p1),
+        .consumption = payload.substring(p1 + 1, p2).toFloat(),
+        .temp        = payload.substring(p2 + 1, p3).toFloat(),
+    };
+    displayValues(d);
 }
 
 void connect()
 {
-    if (WiFi.status() == WL_CONNECTED) return;
-    WiFi.begin(kSSID.c_str(), kPassPhrase.c_str());
-    for (int i = 0; i < kConnectRetry; i++) {
-        if (WiFi.status() == WL_CONNECTED) return;
+    bool errorDisplayed = false;
+    unsigned long now   = millis();
+    Serial.print("checking wifi...");
+    while (WiFi.status() != WL_CONNECTED) {
+        Serial.print(".");
+        if (millis() - now > kConnectTimeout) {
+            if (!errorDisplayed) {
+                displayWifiConnectionError();
+                errorDisplayed = true;
+            }
+        }
         delay(kConnectDelay);
     }
-    displayConnectionError();
-}
 
-void displayValues()
-{
-    int fgColor;
-    if (curTemp > 60) {
-        fgColor            = RED;
-        valueScreenBgColor = BLACK;
-    } else {
-        fgColor            = CYAN;
-        valueScreenBgColor = BLACK;
-    }
-
-    M5.Lcd.fillScreen(valueScreenBgColor);
-    M5.Lcd.setTextColor(WHITE, valueScreenBgColor);
-    M5.Lcd.setFreeFont(&IBMPlexMono_Regular9pt8b);
-    M5.lcd.drawString(curDate, 5, 5, 1);
-    M5.lcd.drawRightString(curTime, 315, 5, 1);
-
-    char text[8];
-    sprintf(text, "%4.1f°C", curTemp);
-    M5.Lcd.setTextColor(fgColor, valueScreenBgColor);
-    M5.Lcd.setFreeFont(&IBMPlexMono_SemiBold40pt8b);
-    M5.lcd.drawCentreString(text, kCenterX, 70, 1);
-    isError = false;
-}
-
-void updateValues()
-{
-    curTemp = NAN;
-    if (WiFi.status() == WL_CONNECTED) {
-        HTTPClient http;
-        http.begin(kUrl.c_str());
-        int res = http.GET();
-        if (res > 0) {
-            String payload = http.getString();
-            curDate        = extractField(payload, "dateValue");
-            curTime        = extractField(payload, "timeValue").substring(0, 8);
-            String s       = extractField(payload, "analogOutTemp");
-            if (s != "") {
-                curTemp = s.toFloat();
+    errorDisplayed = false;
+    now            = millis();
+    Serial.print("\nconnecting...");
+    while (!client.connect("arduino")) {
+        Serial.print(".");
+        if (millis() - now > kConnectTimeout) {
+            if (!errorDisplayed) {
+                displayMqttConnectionError();
+                errorDisplayed = true;
             }
-        } else {
-            Serial.printf("HTTP GET failed, error: %s\n",
-                          http.errorToString(res).c_str());
         }
-        http.end();
-    } else {
-        Serial.println("Not connected");
+        delay(kConnectDelay);
     }
+
+    Serial.println("\nconnected!");
+    client.subscribe(kMqttTopic);
 }
 
 void setup()
@@ -192,26 +206,20 @@ void setup()
     M5.Power.begin();
     M5.Lcd.fillScreen(BLACK);
     Serial.begin(115200);
-    displayStart();
+    displayWelcome();
+    WiFi.begin(kSSID, kPassPhrase);
+    client.begin(kMqttServer, net);
+    client.onMessage(messageReceived);
+    connect();
 }
 
 void loop()
 {
-    static unsigned long lastUpdate = 0;
     M5.update();
-    unsigned long now = millis();
-    if (lastUpdate == 0 || M5.BtnA.isPressed() ||
-        (now - lastUpdate > kPollPeriod * 1000)) {
-        if (M5.BtnA.isPressed()) {
-            displayUpdate();
-        }
+    client.loop();
+    delay(10);  // <- fixes some issues with WiFi stability
+
+    if (!client.connected()) {
         connect();
-        if (WiFi.status() == WL_CONNECTED) {
-            updateValues();
-            displayValues();
-            WiFi.disconnect();
-        }
-        lastUpdate = now;
     }
-    delay(20);
 }

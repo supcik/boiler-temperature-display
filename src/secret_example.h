@@ -7,11 +7,12 @@
 
 #include <Arduino.h>
 
-const String kUrl = "http://...";
+const String kUrl   = "http://...";
 const String kTitle = "TITLE";
 
-const String kSSID = "MyWifiSSID";
-const String kPassPhrase= "MyWifiPassphrase";
-
+const char kSSID[]       = "MyWifiSSID";
+const char kPassPhrase[] = "MyWifiPassphrase";
+const char kMqttServer[] = "server.url.com";
+const char kMqttTopic[]  = "topic";
 
 #endif /* SECRET_H_ */
