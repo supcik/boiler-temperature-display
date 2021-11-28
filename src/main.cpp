@@ -28,7 +28,7 @@
 #include <Wifi.h>
 
 #include "IBMPlexMonoRegular9pt8b.h"
-#include "IBMPlexMonoSemiBold40pt8b.h"
+#include "IBMPlexSansSemiBold40pt8b.h"
 #include "IBMPlexSansBold18pt8b.h"
 #include "IBMPlexSansRegular18pt8b.h"
 #include "secret.h"
@@ -137,7 +137,7 @@ void displayValues(data& d)
     String s = String(text);
     s.trim();
     M5.Lcd.setTextColor(fgColorTemp, bgColor);
-    M5.Lcd.setFreeFont(&IBMPlexMono_SemiBold40pt8b);
+    M5.Lcd.setFreeFont(&IBMPlexSans_SemiBold40pt8b);
     M5.lcd.drawCentreString(s.c_str(), kCenterX, yPos, 1);
     NewLine(yPos);
 
@@ -145,7 +145,7 @@ void displayValues(data& d)
     s = String(text);
     s.trim();
     M5.Lcd.setTextColor(fgColorConsumption, bgColor);
-    M5.Lcd.setFreeFont(&IBMPlexMono_SemiBold40pt8b);
+    M5.Lcd.setFreeFont(&IBMPlexSans_SemiBold40pt8b);
     M5.lcd.drawCentreString(s.c_str(), kCenterX, yPos, 1);
 }
 
@@ -185,7 +185,7 @@ void connect()
     errorDisplayed = false;
     now            = millis();
     Serial.print("\nconnecting...");
-    while (!client.connect("arduino")) {
+    while (!client.connect(("meter:" + WiFi.macAddress()).c_str())) {
         Serial.print(".");
         if (millis() - now > kConnectTimeout) {
             if (!errorDisplayed) {
