@@ -39,6 +39,7 @@
 
 void displayWelcome()
 {
+    M5.Lcd.setBrightness(kMaxBrightness);
     int bgColor = BLUE;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE);
@@ -79,6 +80,7 @@ void displayInfo()
 
 void displayWifiConnectionError()
 {
+    M5.Lcd.setBrightness(kMaxBrightness);
     int bgColor = RED;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE);
@@ -100,6 +102,7 @@ void displayWifiConnectionError()
 
 void displayMqttConnectionError()
 {
+    M5.Lcd.setBrightness(kMaxBrightness);
     int bgColor = MAROON;
     M5.Lcd.fillScreen(bgColor);
     M5.Lcd.setTextColor(WHITE);
