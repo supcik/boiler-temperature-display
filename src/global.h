@@ -28,8 +28,11 @@
 #include <Arduino.h>
 #include <M5Stack.h>
 
-const int kCenterX = TFT_HEIGHT / 2;  // Note : TFT_HEIGHT is the width
-const String kVersion = "0.1.0";
+const int kCenterX       = TFT_HEIGHT / 2;  // Note : TFT_HEIGHT is the width
+const int kMaxBrightness = 255;
+const int kDimBrightness = 1;
+const int kScreenTimeout = 10000;  // milliseconds
+const String kVersion    = "0.1.1";
 
 struct data {
     String timestamp;

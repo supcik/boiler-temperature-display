@@ -107,6 +107,7 @@ void setup()
 {
     M5.begin();
     M5.Power.begin();
+    M5.Lcd.setBrightness(kMaxBrightness);
     M5.Lcd.fillScreen(BLACK);
     Serial.begin(115200);
     displayWelcome();
@@ -118,20 +119,33 @@ void setup()
 
 void loop()
 {
+    static unsigned long lastPressed = millis();
     M5.update();
+    bool anyPressed = false;
 
     if (M5.BtnA.wasPressed()) {
-        gScreenNo = 0;
-        displayValues();
+        gScreenNo  = 0;
+        anyPressed = true;
     }
     if (M5.BtnB.wasPressed()) {
-        gScreenNo = 1;
-        displayValues();
+        gScreenNo  = 1;
+        anyPressed = true;
     }
     if (M5.BtnC.wasPressed()) {
-        gScreenNo = 2;
-        displayValues();
+        gScreenNo  = 2;
+        anyPressed = true;
     }
+
+    if (anyPressed) {
+        displayValues();
+        M5.Lcd.setBrightness(kMaxBrightness);
+        lastPressed = millis();
+    }
+
+    if (millis() - lastPressed > kScreenTimeout) {
+        M5.Lcd.setBrightness(kDimBrightness);
+    }
+
 
     client.loop();
     delay(10);  // <- fixes some issues with WiFi stability
