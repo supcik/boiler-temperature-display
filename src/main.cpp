@@ -18,8 +18,8 @@
  *
  * @brief Water Consumption and temperature Display
  *
- * @date 2021-11-10
- * @version 0.1.0
+ * @date 2021-11-30
+ * @version 0.1.1
  ***************************************************************************/
 
 #include <Arduino.h>
@@ -120,7 +120,7 @@ void setup()
 void loop()
 {
     static unsigned long lastPressed = millis();
-    unsigned long now = millis();
+    unsigned long now                = millis();
     M5.update();
     bool anyPressed = false;
 
@@ -146,7 +146,6 @@ void loop()
     if (now - lastPressed > kScreenTimeout) {
         M5.Lcd.setBrightness(kDimBrightness);
     }
-
 
     client.loop();
     delay(10);  // <- fixes some issues with WiFi stability
