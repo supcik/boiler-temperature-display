@@ -120,6 +120,7 @@ void setup()
 void loop()
 {
     static unsigned long lastPressed = millis();
+    unsigned long now = millis();
     M5.update();
     bool anyPressed = false;
 
@@ -139,10 +140,10 @@ void loop()
     if (anyPressed) {
         displayValues();
         M5.Lcd.setBrightness(kMaxBrightness);
-        lastPressed = millis();
+        lastPressed = now;
     }
 
-    if (millis() - lastPressed > kScreenTimeout) {
+    if (now - lastPressed > kScreenTimeout) {
         M5.Lcd.setBrightness(kDimBrightness);
     }
 
